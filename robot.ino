@@ -1,150 +1,10 @@
 #include <AFMotor.h>
-// #include <iostream>
-// #include <string>
-// #include "MD_MAX72XX.h"
-// #include <SPI.h>
 #include <LedControl.h>
-#include <LiquidCrystal_I2C.h>
 #include <Wire.h>
-
-LiquidCrystal_I2C lcd(0x27, 12, 1);  // set the LCD address to 0x3F for a 16 chars and 2 line display
 
 const int DIN_PIN = 51;
 const int CS_PIN = 53;
 const int CLK_PIN = 49;
-
-
-const byte IMAGES[][8] = {
-  { 0b11111111,
-    0b00000000,
-    0b00000000,
-    0b10000000,
-    0b10000000,
-    0b00000000,
-    0b00000000,
-    0b11111111 },
-  { 0b11111111,
-    0b00000000,
-    0b00000000,
-    0b11000000,
-    0b11000000,
-    0b00000000,
-    0b00000000,
-    0b11111111 },
-  { 0b11111111,
-    0b00000000,
-    0b00000000,
-    0b01100000,
-    0b01100000,
-    0b00000000,
-    0b00000000,
-    0b11111111 },
-  { 0b11111111,
-    0b00000000,
-    0b00000000,
-    0b00110000,
-    0b00110000,
-    0b00000000,
-    0b00000000,
-    0b11111111 },
-  { 0b11111111,
-    0b00000000,
-    0b00000000,
-    0b00011000,
-    0b00011000,
-    0b00000000,
-    0b00000000,
-    0b11111111 },
-  { 0b11111111,
-    0b00000000,
-    0b00000000,
-    0b00001100,
-    0b00001100,
-    0b00000000,
-    0b00000000,
-    0b11111111 },
-  { 0b11111111,
-    0b00000000,
-    0b00000000,
-    0b00000110,
-    0b00000110,
-    0b00000000,
-    0b00000000,
-    0b11111111 },
-  { 0b11111111,
-    0b00000000,
-    0b00000000,
-    0b00000011,
-    0b00000011,
-    0b00000000,
-    0b00000000,
-    0b11111111 },
-  { 0b11111111,
-    0b00000000,
-    0b00000000,
-    0b00000001,
-    0b00000001,
-    0b00000000,
-    0b00000000,
-    0b11111111 },
-  { 0b11111111,
-    0b00000000,
-    0b00000000,
-    0b00000011,
-    0b00000011,
-    0b00000000,
-    0b00000000,
-    0b11111111 },
-  { 0b11111111,
-    0b00000000,
-    0b00000000,
-    0b00000110,
-    0b00000110,
-    0b00000000,
-    0b00000000,
-    0b11111111 },
-  { 0b11111111,
-    0b00000000,
-    0b00000000,
-    0b00011000,
-    0b00011000,
-    0b00000000,
-    0b00000000,
-    0b11111111 },
-  { 0b11111111,
-    0b00000000,
-    0b00000000,
-    0b00110000,
-    0b00110000,
-    0b00000000,
-    0b00000000,
-    0b11111111 },
-  { 0b11111111,
-    0b00000000,
-    0b00000000,
-    0b01100000,
-    0b01100000,
-    0b00000000,
-    0b00000000,
-    0b11111111 },
-  { 0b11111111,
-    0b00000000,
-    0b00000000,
-    0b11000000,
-    0b11000000,
-    0b00000000,
-    0b00000000,
-    0b11111111 },
-  { 0b11111111,
-    0b00000000,
-    0b00000000,
-    0b10000000,
-    0b10000000,
-    0b00000000,
-    0b00000000,
-    0b11111111 }
-};
-const int IMAGES_LEN = sizeof(IMAGES) / 8;
 
 LedControl display = LedControl(DIN_PIN, CLK_PIN, CS_PIN);
 unsigned long delaytime = 100;
@@ -162,20 +22,31 @@ int voltage;
 int SIG_pin = A15;
 
 //PID Control
-double Error = 0.0;
-double SumError = 0.0;
-double LastError = 0.0;
-double BasePWM = 50;
-double Kp = 100;   // Proporsional
-double Ki = 0.2;  // Integral
-double Kd = 60;   // Diferensial
-double Ts = 1;    // Time sampling
-int NilaiPosisi;
-int outPID;
-int Kec_Max = 80;
+double Kp = 0.05;  // Proporsional
+double Ki = 0;     // Integral
+double Kd = 0.05;  // Diferensial
+int Kec_Max = 100;
 int Kec_Min = 50;
 double motorsp1;
 double motorsp2;
+
+#define SetPoint 5500
+
+int hitamPutih = 0;
+
+int proportional = 0;
+int integral = 0;
+int derivative = 0;
+int last_proportional = 0;
+float Position = 0;
+int error_value = 0;
+int sensors_sum = 0;
+int sensors_average = 0;
+
+int count = 1;
+int pertigaan = 0;
+
+String kode = "";
 
 void setup() {
 
@@ -199,313 +70,90 @@ void setup() {
   display.clearDisplay(0);
   display.shutdown(0, false);
   display.setIntensity(0, 10);
-
-  // Leonardo: wait for serial port to connect
-  while (!Serial) {
-  }
-
-  Serial.println();
-  Serial.println("I2C scanner. Scanning ...");
-  byte count = 0;
-
-  Wire.begin();
-  for (byte i = 8; i < 120; i++) {
-    Wire.beginTransmission(i);
-    if (Wire.endTransmission() == 0) {
-      Serial.print("Found address: ");
-      Serial.print(i, DEC);
-      Serial.print(" (0x");
-      Serial.print(i, HEX);
-      Serial.println(")");
-      count++;
-      delay(1);  // maybe unneeded?
-    }            // end of good response
-  }              // end of for loop
-  Serial.println("Done.");
-  Serial.print("Found ");
-  Serial.print(count, DEC);
-  Serial.println(" device(s).");
-  // end of setup
-
-  lcd.init();
-  lcd.clear();
-  lcd.backlight();  // Make sure backlight is on
-
-  // Print a message on both lines of the LCD.
-
-
-  // lcd.setCursor(2,1);   //Move cursor to character 2 on line 1
-  // lcd.print("LCD Tutorial");
-}
-
-void displayImage(const byte* image) {
-  for (int i = 0; i < 8; i++) {
-    for (int j = 0; j < 8; j++) {
-      display.setLed(0, i, j, bitRead(image[i], 7 - j));
-    }
-  }
-}
-
-int i = 0;
-
-void lineFollow() {
-  // robotPosition();
-  int SetPoint = 0;                // Setpoint yang diinginkan
-  Error = SetPoint - NilaiPosisi;  // Error
-  Serial.print("Nilai Posisi = ");
-  Serial.println(NilaiPosisi);
-  double DeltaError = Error - LastError;  // Delta Error (Selisih error sekarang e(t) dengan error sebelumya e(t-1))
-  Serial.print("Delta Error = ");
-  Serial.println(DeltaError);
-  SumError += LastError;                // Akumulasi error
-  double P = Kp * Error;                // Kontrol proporsional
-  double I = Ki * SumError * Ts;        // Kontrol integral
-  double D = ((Kd / Ts) * DeltaError);  // Kontrol derivative
-  LastError = Error;                    // Error sebelumnya
-  outPID = P + I + D;
-  Serial.print("Out PID = ");
-  Serial.println(outPID);       // Output PID
-  motorsp1 = BasePWM - outPID;  // Motor Kiri
-  motorsp2 = BasePWM + outPID;  // Motor Kanan
-
-  Serial.print("Motor Sp1 = ");
-  Serial.println(motorsp1);
-
-  Serial.print("Motor Sp2 = ");
-  Serial.println(motorsp2);
-  /*** Pembatasan kecepatan ***/
-  if (motorsp1 > Kec_Max) motorsp1 = Kec_Max;
-  if (motorsp1 < Kec_Min) motorsp1 = Kec_Min;
-  if (motorsp2 > Kec_Max) motorsp2 = Kec_Max;
-  if (motorsp2 < Kec_Min) motorsp2 = Kec_Min;
-
-  maju(motorsp1, motorsp2);
 }
 
 void loop() {
+  cekSensor();
+  if (count == 1) {
+    maju(90, 90);
+    delay(500);
+    count++;
+  } else if (count == 2) {
+    if (sensors_sum >= 4) {
+      bantingKanan(90, 90);
+      delay(300);
+      pertigaan++;
+      if (pertigaan > 1) {
 
-  // displayImage(IMAGES[i]);
-  // if (++i >= IMAGES_LEN) {
-  //   i = 0;
-  // }
-  // delay(500);
-
-
-  String kode = "";
-  // kode = readMux();
-
-  for (int channel = 0; channel < 14; channel++) {
-    float sense = readMux(channel);
-    if (sense >= 4) {
-      kode = kode + 1;
-
-      //set led
-      nyalaled(channel, true);
-
-      switch (channel) {
-        case 0:
-        NilaiPosisi = NilaiPosisi - 2;
-          break;
-        case 1:
-        NilaiPosisi = NilaiPosisi - 2;
-          break;
-        case 2:
-        NilaiPosisi = NilaiPosisi - 2;
-          break;
-        case 3:
-        NilaiPosisi = NilaiPosisi - 1;
-          break;
-        case 4:
-        NilaiPosisi = NilaiPosisi - 1;
-          break;
-        case 5:
-        NilaiPosisi = NilaiPosisi - 1;
-          break;
-        case 6:
-        NilaiPosisi = NilaiPosisi - 0;
-          break;
-        case 7:
-        NilaiPosisi = NilaiPosisi - 0;
-          break;
-        case 8:
-        NilaiPosisi = NilaiPosisi + 1;
-          break;
-          case 9:
-        NilaiPosisi = NilaiPosisi + 1;
-          break;
-          case 10:
-        NilaiPosisi = NilaiPosisi + 1;
-          break;
-          case 11:
-        NilaiPosisi = NilaiPosisi + 2;
-          break;
-          case 12:
-        NilaiPosisi = NilaiPosisi + 2;
-          break;
-          case 13:
-        NilaiPosisi = NilaiPosisi + 2;
-          break;
+        count++;
       }
-
     } else {
-
-      kode = kode + 0;
-      nyalaled(channel, false);
+      lineFollow();
     }
+  } else if (count == 3) {
+    if (sensors_sum >= 4) {
+      bantingKiri(90, 90);
+      delay(300);
+      pertigaan++;
+    } else {
+      lineFollow();
+    }
+  } else {
+    lineFollow();
   }
 
-  arah(kode);
 
-  lcd.setCursor(2, 0);  //Set cursor to character 2 on line 0
-  lcd.print(kode);
-  // delay(1000);
+  // if (sensors_Sum > 3) {
+  //   count++;
+  // }
 
+  // if (count == 2) {
+  //   maju(0, 100);
+  //   delay(700);
+  //   count++;
+  // } else {
+  //   lineFollow();
+  // }
 
-
-
-
-  //         if(kode.equals("000000000001")) {
-  //   NilaiPosisi = -16;
-
-  //  } else if(kode.equals("000000000011")) {
-  //   NilaiPosisi = -15;
-
-  //  } else if(kode.equals("000000000111")) {
-  //   NilaiPosisi = -14;
-
-  //  } else if(kode.equals("000000000010")) {
-  //   NilaiPosisi = -13;
-
-  //  } else if(kode.equals("000000000110")) {
-  //   NilaiPosisi = -12;
-
-  //  } else if(kode.equals("000000001110")) {
-  //   NilaiPosisi = -11;
-
-  //  } else if(kode.equals("000000000100")) {
-  //   NilaiPosisi = -10;
-
-  //  } else if(kode.equals("000000001100")) {
-  //   NilaiPosisi = -9;
-
-  //  } else if(kode.equals("000000011100")) {
-  //   NilaiPosisi = -8;
-
-  //  } else if(kode.equals("000000001000")) {
-  //   NilaiPosisi = -7;
-
-  //  } else if(kode.equals("000000011000")) {
-  //   NilaiPosisi = -6;
-
-  //  } else if(kode.equals("000000111000")) {
-  //   NilaiPosisi = -5;
-
-  //  } else if(kode.equals("000000010000")) {
-  //   NilaiPosisi = -4;
-
-  //  } else if(kode.equals("000000110000")) {
-  //   NilaiPosisi = -3;
-
-  //  } else if(kode.equals("000001110000")) {
-  //   NilaiPosisi = -2;
-
-  //  } else if(kode.equals("000000100000")) {
-  //   NilaiPosisi = -1;
-
-  //  } else if(kode.equals("000001100000")) {
-  //   NilaiPosisi = 0;
-
-  //  } else if(kode.equals("000011100000")) {
-  //   NilaiPosisi = 1;
-
-  //  } else if(kode.equals("000001000000")) {
-  //   NilaiPosisi = 2;
-
-  //  } else if(kode.equals("000011000000")) {
-  //   NilaiPosisi = 3;
-
-  //  } else if(kode.equals("000111000000")) {
-  //   NilaiPosisi = 4;
-
-  //  } else if(kode.equals("000010000000")) {
-  //   NilaiPosisi = 5;
-
-  //  } else if(kode.equals("000110000000")) {
-  //   NilaiPosisi = 6;
-
-  //  } else if(kode.equals("001110000000")) {
-  //   NilaiPosisi = 7;
-
-  //  } else if(kode.equals("000100000000")) {
-  //   NilaiPosisi = 8;
-
-  //  } else if(kode.equals("001100000000")) {
-  //   NilaiPosisi = 9;
-
-  //  } else if(kode.equals("011100000000")) {
-  //   NilaiPosisi = 10;
-
-  //  } else if(kode.equals("001000000000")) {
-  //   NilaiPosisi = 11;
-
-  //  } else if(kode.equals("011000000000")) {
-  //   NilaiPosisi = 12;
-
-  //  } else if(kode.equals("111000000000")) {
-  //   NilaiPosisi = 13;
-
-  //  } else if(kode.equals("010000000000")) {
-  //   NilaiPosisi = 14;
-
-  //  } else if(kode.equals("110000000000")) {
-  //   NilaiPosisi = 15;
-
-  //  } else if(kode.equals("100000000000")) {
-  //   NilaiPosisi = 16;
-  //  }
-
-  lineFollow();
-  
-  NilaiPosisi = 0;
+  sensors_average = 0;
+  sensors_sum = 0;
 }
 
-void arah(String kode) {
+void cekSensor() {
+  kode = "";
 
+  for (int channel = 0; channel < 12; channel++) {
+    int sense = readMux(channel + 1);
+
+    if (sense >= 1000) {
+      hitamPutih = 1;
+
+      //set led
+      nyalaled(channel + 1, true);
+
+    } else {
+      hitamPutih = 0;
+      nyalaled(channel + 1, false);
+    }
+
+    kode = kode + hitamPutih;
+
+    sensors_average += hitamPutih * channel * 1000;
+    sensors_sum += hitamPutih;
+  }
+
+  if (sensors_average == 0) {
+    Position = 0;
+  } else {
+    Position = sensors_average / sensors_sum;
+  }
+  Serial.print("Position=");
+  Serial.println(Position);
 
   Serial.println(kode);
-
-
-  // if (kode.equals("000001100000") || kode.equals("000011100000") || kode.equals("000001110000") || kode.equals("00000110000") || kode.equals("00001100000")) {
-  //   maju(100, 138); //lurus
-
-  // } else if (kode.equals("000111000000") || kode.equals("001100000000") || kode.equals("001110000000")) {
-  //   maju(100, 100); //miring ke kiri
-  // } else if (kode.equals("000000111000") || kode.equals("000000001100") || kode.equals("000000011100")) {
-  //   maju(100, 150); //miring ke kanan
-  // } else if (kode.equals("100001100001") || kode.equals("110001100001") || kode.equals("100001100011") || kode.equals("110001100011") || kode.equals("100011100011") || kode.equals("110001110001")) {
-  //   maju(0, 100); //perempatan5
-  // } else if (kode.equals("100000000001") || kode.equals("110000000001") || kode.equals("100000000011") || kode.equals("110000000011")) {
-  //   maju(0, 100); //pertigaan
-  // } else if (kode.equals("011000000000") || kode.equals("011100000000") || kode.equals("110000000000") || kode.equals("111000000000")) {
-  //   maju(0, 100); //kiri
-  // } else if (kode.equals("000000000110") || kode.equals("000000001110") || kode.equals("000000000011") || kode.equals("000000000111")) {
-  //   maju(100, 0); //kanan
-
-  // } else if (kode.equals("000001100000")) {
-  //   maju(100, 100);
-  // } else if (kode.equals("000001100000")) {
-  //   maju(100, 100);
-  // } else if (kode.equals("000001100000")) {
-  //   maju(100, 100);
-  // } else if (kode.equals("000001100000")) {
-  //   maju(100, 100);
 }
-// else {
-//   stopAllMotor();
-// }
-// }
 
-float readMux(int channel) {
+int readMux(int channel) {
 
   int muxChannel[16][4] = {
     { 0, 0, 0, 0 },  //channel 0
@@ -527,33 +175,13 @@ float readMux(int channel) {
   };
 
   int controlPin[] = { S0, S1, S2, S3 };
-  // String kode = "";
-
-
 
   for (int i = 0; i < 4; i++) {
     digitalWrite(controlPin[i], muxChannel[channel][i]);
   }
   int val = analogRead(SIG_pin);
-  voltage = (val * 5) / 1024;
-  // Serial.println(voltage);
 
-  return voltage;
-  // delay(1);
-
-
-  //  if (voltage >= 4) {
-  //   kode = kode + 1;
-
-  //   //set led
-  //   nyalaled(channel, true);
-
-  // } else {
-  //   kode = kode + 0;
-  //   nyalaled(channel, false);
-  // }
-
-  // return kode;
+  return val;
 }
 
 void nyalaled(int channel, bool on) {
@@ -603,6 +231,49 @@ void nyalaled(int channel, bool on) {
   }
 }
 
+void lineFollow() {
+
+  proportional = Position - SetPoint;
+  integral = integral + proportional;
+  derivative = proportional - last_proportional;
+  last_proportional = proportional;
+  error_value = int((proportional * Kp) + (integral * Ki) + (derivative * Kd));
+  Serial.print("Error Value=");
+  Serial.println(error_value);
+
+  if (error_value < -255) {
+    error_value = -255;
+  }
+  if (error_value > 255) {
+    error_value = 255;
+  }
+
+  if (error_value < 0) {
+    motorsp1 = Kec_Max + error_value;
+    motorsp2 = Kec_Max;
+  } else {
+    motorsp1 = Kec_Max;
+    motorsp2 = Kec_Max - error_value;
+  }
+
+
+  if (motorsp2 > 100)
+    motorsp2 = 100;
+  if (motorsp2 < 0)
+    motorsp2 = 0;
+  if (motorsp1 > 100)
+    motorsp1 = 100;
+  if (motorsp1 < 0)
+    motorsp1 = 0;
+
+  Serial.println("Left Speed=");
+  Serial.println(motorsp1);
+  Serial.println("Right Speed=");
+  Serial.println(motorsp2);
+
+  maju(motorsp1, motorsp2);
+}
+
 void maju(double speed1, double speed2) {
 
   motor1.setSpeed(speed1);
@@ -610,14 +281,27 @@ void maju(double speed1, double speed2) {
 
   motor2.run(FORWARD);
   motor1.run(FORWARD);
-  lcd.setCursor(0, 1);  //Set cursor to character 2 on line 0
-  lcd.print(speed1);
-  Serial.println(speed1);
-  Serial.println(speed2);
+}
+
+void bantingKiri(double speed1, double speed2) {
+  stopAllMotor();
+  motor1.setSpeed(speed1);
+  motor2.setSpeed(speed2);
+
+  motor2.run(FORWARD);
+  motor1.run(BACKWARD);
+}
+
+void bantingKanan(double speed1, double speed2) {
+  stopAllMotor();
+  motor1.setSpeed(speed1);
+  motor2.setSpeed(speed2);
+
+  motor2.run(BACKWARD);
+  motor1.run(FORWARD);
 }
 
 void stopAllMotor() {
-
   motor2.run(RELEASE);
   motor1.run(RELEASE);
 }
