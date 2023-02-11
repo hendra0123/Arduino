@@ -7,7 +7,7 @@ const int CS_PIN = 53;
 const int CLK_PIN = 49;
 
 LedControl display = LedControl(DIN_PIN, CLK_PIN, CS_PIN);
-unsigned long delaytime = 100;
+// unsigned long delaytime = 100;
 
 AF_DCMotor motor1(1);
 AF_DCMotor motor2(2);
@@ -19,14 +19,16 @@ int S3 = 40;
 
 int voltage;
 
-int SIG_pin = A15;
+int SIG_pin = A14;
 
 //PID Control
-double Kp = 0.05;  // Proporsional
+// double Kp = 0.028;// Proporsional
+double Kp = 0.03;  // Proporsional
 double Ki = 0;     // Integral
-double Kd = 0.05;  // Diferensial
-int Kec_Max = 100;
-int Kec_Min = 50;
+// double Kd = 0.052;  // Diferensial
+double Kd = 0.06;  // Diferensial
+int Kec_Max = 90;
+int Kec_Min = 0;
 double motorsp1;
 double motorsp2;
 
@@ -43,8 +45,34 @@ int error_value = 0;
 int sensors_sum = 0;
 int sensors_average = 0;
 
-int count = 1;
+int count = 3;
 int pertigaan = 0;
+int GudangTujuan = 0;
+int PabrikTujuan = 0;
+int GudangAsal = 0;
+int PabrikAsal = 0;
+
+int kodeSensor[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+
+int rutePabrik[3][3][3] = { { { 0, 3, 3 },      // pabrik 1 ke gudang 1
+                              { 1, 2, 3 },      // pabrik 1 ke gudang 2
+                              { 1, 0, 2 } },    // pabrik 1 ke gudang 3
+                            { { 2, 1, 3 },      // pabrik 2 ke gudang 1
+                              { 0, 3, 3 },      // pabrik 2 ke gudang 2
+                              { 1, 2, 3 } },    // pabrik 2 ke gudang 3
+                            { { 2, 0, 1 },      // pabrik 3 ke gudang 1
+                              { 2, 1, 3 },      // pabrik 3 ke gudang 2
+                              { 0, 3, 3 } } };  // pabrik 3 ke gudang 3
+
+int ruteGudang[3][3][3] = { { { 3, 3, 3 },
+                              { 2, 1, 3 },    // gudang 1 ke pabrik 2
+                              { 2, 0, 1 } },  // gudang 1 ke pabrik 3
+                            { { 3, 3, 3 },
+                              { 0, 3, 3 },    // gudang 2 ke pabrik 2
+                              { 2, 1, 3 } },  // gudang 2 ke pabrik 3
+                            { { 3, 3, 3 },
+                              { 1, 2, 3 },      // gudang 3 ke pabrik 2
+                              { 0, 3, 3 } } };  // gudang 3 ke pabrik 3
 
 String kode = "";
 
@@ -75,57 +103,68 @@ void setup() {
 void loop() {
   cekSensor();
   if (count == 1) {
-    maju(90, 90);
-    delay(500);
-    count++;
+    // maju(100, 100);
+    // delay(300);
+    // count++;
   } else if (count == 2) {
-    if (sensors_sum >= 4) {
-      bantingKanan(90, 90);
-      delay(300);
-      pertigaan++;
-      if (pertigaan > 1) {
+    // if (sensors_sum >= 4 && (Position >= 3500 && Position <= 7500)) {
+    //   bantingKanan(90, 90);
+    //   delay(200);
+    // } else {
+    //   lineFollow();
+    // }
+    lineFollow();
+  } else if (count == 3) {
+    if (sensors_sum >= 4 && (Position >= 3500 && Position <= 7500)) {
 
+      if (pertigaan == 1) {
+        // ambil barang
+        PabrikAsal = 0;
+        GudangTujuan = 1;  // tergantung
+        putarBalik();
+        pertigaan = 0;
         count++;
+      } else if (pertigaan == 0) {
+        bantingKiri(90, 90);
+        delay(500);
+        pertigaan++;
       }
     } else {
       lineFollow();
     }
-  } else if (count == 3) {
-    if (sensors_sum >= 4) {
-      bantingKiri(90, 90);
-      delay(300);
+  } else if (count == 4) {
+    if (sensors_sum >= 4 && (Position >= 3500 && Position <= 7500)) {
+      cariRute(rutePabrik[PabrikAsal][GudangTujuan][pertigaan]);
       pertigaan++;
     } else {
       lineFollow();
     }
+  } else if (count == 5) {
+    if (sensors_sum >= 4 && (Position >= 3500 && Position <= 7500)) {
+      cariRute(ruteGudang[GudangAsal][PabrikTujuan][pertigaan]);
+      pertigaan++;
+    } else {
+      lineFollow();
+    }
+
+    sensors_average = 0;
+    sensors_sum = 0;
   } else {
     lineFollow();
   }
-
-
-  // if (sensors_Sum > 3) {
-  //   count++;
-  // }
-
-  // if (count == 2) {
-  //   maju(0, 100);
-  //   delay(700);
-  //   count++;
-  // } else {
-  //   lineFollow();
-  // }
-
-  sensors_average = 0;
-  sensors_sum = 0;
 }
+
 
 void cekSensor() {
   kode = "";
 
+  sensors_sum = 0;
+  sensors_average = 0;
+
   for (int channel = 0; channel < 12; channel++) {
     int sense = readMux(channel + 1);
 
-    if (sense >= 1000) {
+    if (sense >= 1010) {
       hitamPutih = 1;
 
       //set led
@@ -275,7 +314,6 @@ void lineFollow() {
 }
 
 void maju(double speed1, double speed2) {
-
   motor1.setSpeed(speed1);
   motor2.setSpeed(speed2);
 
@@ -283,8 +321,16 @@ void maju(double speed1, double speed2) {
   motor1.run(FORWARD);
 }
 
-void bantingKiri(double speed1, double speed2) {
+void putarBalik() {
   stopAllMotor();
+  delay(200);
+  bantingKiri(100, 100);
+  delay(900);
+  stopAllMotor();
+  delay(200);
+}
+
+void bantingKiri(double speed1, double speed2) {
   motor1.setSpeed(speed1);
   motor2.setSpeed(speed2);
 
@@ -293,7 +339,6 @@ void bantingKiri(double speed1, double speed2) {
 }
 
 void bantingKanan(double speed1, double speed2) {
-  stopAllMotor();
   motor1.setSpeed(speed1);
   motor2.setSpeed(speed2);
 
@@ -304,4 +349,37 @@ void bantingKanan(double speed1, double speed2) {
 void stopAllMotor() {
   motor2.run(RELEASE);
   motor1.run(RELEASE);
+}
+
+void cariRute(int perintah) {
+  switch (perintah) {
+    case 0:  //lurus
+      maju(90, 90);
+      delay(300);
+      break;
+
+    case 1:  //kiri
+      bantingKiri(90, 90);
+      delay(300);
+      break;
+
+    case 2:  //kanan
+      bantingKanan(90, 90);
+      delay(300);
+      break;
+
+    case 3:
+      // ambil barang
+      putarBalik();
+      count++;
+      PabrikTujuan = PabrikAsal + 1;
+      GudangAsal = GudangTujuan;
+      break;
+
+    case 4:
+      break;
+
+    default:
+      return;
+  }
 }
